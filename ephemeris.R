@@ -53,6 +53,7 @@ d_gsc$lon180 <- ifelse(d_gsc$lon > 180, d_gsc$lon-360, d_gsc$lon)
 # Ground Track ----
 col_trk <- c('t_g', 'lon180', 'lat')
 d_trk <- d_gsc[, col_trk, with=T]
+# functionalize & change accordingly ;) 
 d_trk$t <- d_trk$t_g$hour
 
 ## Sun Elevation Angle of sub-satellite point ----

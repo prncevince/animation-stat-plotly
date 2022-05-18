@@ -19,5 +19,4 @@ d_col$t_start <- as.POSIXlt(
   format = "%Y/%m/%d %H:%M:%OS", tz = "UTC"
 )
 
-d$t <- d_col$t_start$hour
-
+d_col$t <- d_col$t_start$hour
