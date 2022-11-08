@@ -26,25 +26,66 @@ d_trk_day2$text_trk <- paste0(
 )
 
 # map base layer ----
-rworld <- st_as_sf(getMap(resolution = "low"))
-rworld_sm <- st_simplify(rworld, TRUE, dTolerance = 1) %>%
-  st_cast("MULTIPOLYGON")
+# rworld <- st_as_sf(getMap(resolution = "low"))
+# rworld_sm <- st_simplify(rworld, TRUE, dTolerance = 1) %>%
+#  st_cast("MULTIPOLYGON")
+#  add_sf(
+#    data = rworld_sm, name = "map", hoverinfo = "none",
+#    color = I("black"), fillcolor = "transparent"
+#  ) %>%
+
+d_sf_ne <- rnaturalearth::ne_countries(scale = 50, returnclass = "sf")
+
+#  # polygons colored by category type or stat
+#  add_trace(
+#    data = d_rect, frame = ~t_acc, type = "scatter", mode = "lines",
+#    fill = "toself", line = list(color = "transparent"),
+#    x = ~x_r, y = ~y_r, color = ~by
+#  ) %>%
+#  # text hover traces as center points of polygons - same color hover as polygon color
+#  add_trace(
+#    data = d_text, frame = ~frame, type = "scatter", mode = "markers",
+#    text = ~text, hoverinfo = "text", x = ~x_t, y = ~y_t,
+#    color = I("transparent"), hoverlabel = list(bgcolor = ~by) # `hoverlabel = list(bgcolor = ~stat)` when d_rect & d_text are one w/ the text 
+#  ) %>%
+#  add_annotations(
+#    text = "By Type", showarrow = FALSE,
+#    x = 1.0, xref = "paper", xanchor = "left",
+#    y = 0.85, yref = "paper", yanchor = "bottom"
+#  ) %>%
+#  layout(
+#    title = "Accumulation by By Type", 
+#    xaxis = list(
+#      ticks = "outside", tick0 = 0, dtick = 30, showticklabels = TRUE, 
+#      showgrid = TRUE
+#    ),
+#    yaxis = list(
+#      ticks = "outside", tick0 = 0, dtick = 30, showticklabels = TRUE, 
+#      showgrid = TRUE
+#    )
+#  ) %>%
+
+# just imagine below :) 
+# `id` is a unique identifier for the polygon - needs to be created
+d_plot <- cbind(d_rect, d_text)
 
 # polygon base plot ----
 p_rect_base <- plot_ly() %>%
   add_sf(
-    data = rworld_sm, name = "map", hoverinfo = "none",
-    color = I("black"), fillcolor = "transparent"
+    name = "map", data = d_sf_ne[, 'geometry'],
+    color = I("black"), fillcolor = "transparent", hoverinfo = "none"
   ) %>%
-  add_trace(
-    data = d_rect, frame = ~t_acc, type = "scatter", mode = "lines",
-    fill = "toself", line = list(color = "transparent"),
-    x = ~x_r, y = ~y_r, color = ~by
+  # polygons colored by category type or stat
+  add_polygons(
+    data = d_plot %>% group_by(id),
+    x = ~x_r, y = ~y_r, showlegend = T, frame = ~t_acc,
+    fillcolor = ~stat, stroke = ~counts, hoveron = "fills", text = ~text
   ) %>%
+  # text hover traces as center points of polygons - same color hover as polygon color
   add_trace(
-    data = d_text, frame = frame, type = "scatter", mode = "markers",
+    data = d_plot %>% group_by(id), frame = ~frame, type = "scatter", mode = "markers",
     text = ~text, hoverinfo = "text", x = ~x_t, y = ~y_t,
-    color = I("transparent"), hoverlabel = list(bgcolor = ~by)
+    color = I("transparent"), hoverlabel = list(bgcolor = ~stat)
   ) %>%
   add_trace(
     data = d_trk_day2, frame = ~t, type = "scatter", mode = "markers",
@@ -68,6 +109,17 @@ p_rect_base <- plot_ly() %>%
   ) %>%
   animation_opts(
     transition = 0, frame = 2000, redraw = FALSE
+  ) %>%
+  # for debugging in browser
+  htmlwidgets::onRender(
+    "
+      function(el) {
+        el.on('plotly_hover', function(d) {
+        console.log('Hover: ', d)
+        console.log(el)
+        })
+      }
+    "
   )
 # could mess w/ easing = 'quad-out' as animation_opts param value
 
@@ -80,17 +132,35 @@ p_mark_plt <- plot_ly() %>%
   )
 
 # built plotly objects ----
-p_rect_blt <- plotly_build(p_rect_base)
-p_mark_blt <- plotly_build(p_mark_plt)
+tic()
+p_rect_blt <- plotly_build(p_rect_base, registerFrames = T)
+toc()
+tic()
+p_mark_blt <- plotly_build(p_mark_plt, registerFrames = T)
+toc()
 
 # after build steps ----
 p_blt <- p_rect_blt
 
+len_fs <- length(pl_blt$x$frames)
+len_d  <- length(pl_blt$x$data) 
+
 ## add names to traces ----
+## name NULL value non-unique trace `name` values accordingly
 # Plotly does not know how to properly add names to the text info and ground track
 # traces. To put our traces into correct order (next step), we need this unique identifier.
 # Here we see that each frame has n traces
 # unlist(lapply(p_blt$x$frames, function(f) length(f$data)))
+p_blt$x$data <- lapply(p_blt$x$data, function(t) {
+  if(is.null(t$name)) {
+    if(identical(class(t), 'plotly_colorbar')) {
+      t$name <- "colorbar"
+    }
+    if(identical(substr(t$text[1], 1, 3), 'WAC')) {
+      t$name <- "info"
+    }
+  }
+})
 p_blt$x$frames <- lapply(
   p_blt$x$frames,
   function(f) {
@@ -107,6 +177,16 @@ p_blt$x$frames <- lapply(
     return(f)
   }
 )
+
+## set visible ----
+# description: when we set the `visible` attribute of our traces to "NULL",
+# this makes ALL traces visible ALWAYS
+# OTHERWISE - when the slider moves - the traces stay put
+# the legend toggle of trace visibility works correctly too
+pl_blt$x$frames <- lapply(pl_blt$x$frames, function(f) {
+  f$datya <- lapply(f$data, function(f) {t$visible <- NULL; return(t)})
+  return(f)
+})
 
 ## order traces correctly ----
 # This keeps the traces in the legend in order & correctly shows traces
