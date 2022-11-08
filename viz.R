@@ -178,63 +178,64 @@ p_blt$x$frames <- lapply(
   }
 )
 
+## set correct frames, register traces in each frame ----
+# TBD: add dummy data for legend
+for (i in 1:len_fs) {
+  len_di <- length(p_blt$x$frames[[i]]$data)
+  p_blt$x$frames[[i]]$traces <- 1:len_di
+  for (j in 1:len_di) {
+    p_blt$x$frames[[i]]$data[[j]]$frame <- as.character(i-1) 
+    if (identical(FALSE, p_blt$x$frames[[i]]$data[[j]]$visible)) {
+      p_blt$x$frames[[i]]$data[[j]]$x <- c(0,0,1,1)
+      p_blt$x$frames[[i]]$data[[j]]$y <- c(0,1,1,0)
+    }
+  }
+}
+
 ## set visible ----
 # description: when we set the `visible` attribute of our traces to "NULL",
 # this makes ALL traces visible ALWAYS
 # OTHERWISE - when the slider moves - the traces stay put
 # the legend toggle of trace visibility works correctly too
 pl_blt$x$frames <- lapply(pl_blt$x$frames, function(f) {
-  f$datya <- lapply(f$data, function(f) {t$visible <- NULL; return(t)})
+  f$data <- lapply(f$data, function(f) {t$visible <- NULL; return(t)})
   return(f)
 })
 
 ## order traces correctly ----
-# This keeps the traces in the legend in order & correctly shows traces
-# for each frame.
-#
+# shuffle traces of each frame into order
+# description: this allows the traces in the legend to stay in order
+# ALSO controls which traces are shown in each frame via `$frames$traces`
+# if `fillcolor` is NULL - this is our text trace - we can put in beginning or end
+# These indecies match the index of the traces in the `x$data` array,
+# so here, we leave out the index of the map (0).
+trace_names <- lapply(pl_blt$x$frames[[1]]$data, function(t) t$name) %>% unlist()
+trace_fillcolor <- lapply(pl_blt$x$frames[[1]]$data, function(t) t$fillcolor) %>% unlist()
+i_trace_nullcolor <- lapply(pl_blt$x$frames[[1]]$data, function(t) class(t$fillcolor)) %>%
+  lapply(identical, "NULL") %>% unlist()
+i_trace_color_order <- order(trace_fillcolor)
+trace_names_append <- trace_names[i_trace_nullcolor]
+trace_names_prepend <- trace_names[!i_trace_nullcolor][i_trace_color_order]
+trace_names_ordered <- c(trace_names_prepend, trace_names_append)
+
+for (i in 1:len_fs) {
+  len_di <- length(p_blt$x$frames[[i]]$data)
+  len_i <- as.list(1:len_di)
+  for (j in 1:len_di) {
+    l_i[[which(trace_names_ordered == p_blt$x$frames[[i]]$data[[j]]$name)]] <- 
+      p_blt$x$frames[[i]]$data[[j]]
+    # l_i[[which(order_t == p_blt$x$frames[[i]]$data[[j]]$name)]] <- p_blt$x$frames[[i]]$data[[j]]
+  }
+  p_blt$x$frames[[i]]$traces <- 1:len_di
+  p_blt$x$frames[[i]]$data <- l_i
+}
 # Below is not in order
 # `unique` orders by 1st occurrence
 # order_t <- as.character(unique(d_rect$by))
 # order_t <- unlist(lapply(p_blt$x$frames[[1]]$data, function(i) i$name))
-by_cats <- as.character(unique(d_rect$by))
-order_t <- c("by1", "by2", "by3", "info", "trk")
-len_fs <- length(p_blt$x$frames)
-for (i in 1:len_fs) {
-  len_d <- length(p_blt$x$frames[[i]]$data)
-  len_i <- as.list(1:len_d)
-  for (j in 1:len_d) {
-    l_i[[which(order_t == p_blt$x$frames[[i]]$data[[j]]$name)]] <- p_blt$x$frames[[i]]$data[[j]]
-  }
-  p_blt$x$frames[[i]]$data <- l_i
-}
-
-## delete incorrect data, add dummy data for legend, set correct frames, register traces in each frame ----
-# This deletes data in all `frames[[i]]$data` list objects for frames whose data
-# is not for the specified frame.
-# We delete this data & add transparent dummy data so that the legend is still
-# shown and the trace is registered. We make the trace `null` so that plotly 
-# toggles the visibility correctly at each frame
-# Also registers the frames properly, showing all traces in the legend at each frame
-# Also registers traces in each frame.
-# These indicies match the index of the traces in the `x$data` list object,
-# so here we leave out the index of the base map trace (0)
-for (i in 1:len_fs) {
-  len_d <- length(p_blt$x$frames[[i]]$data)
-  p_blt$x$frames[[i]]$traces <- 1:len_d
-  for (j in 1:len_d) {
-    if (identical(FALSE, p_blt$x$frames[[i]]$data[[j]]$visible)) {
-      p_blt$x$frames[[i]]$data[[j]]$x <- c(0,0,1,1)
-      p_blt$x$frames[[i]]$data[[j]]$y <- c(0,1,1,0)
-      p_blt$x$frames[[i]]$data[[j]]$frame <- as.character(i-1)
-    }
-  }
-}
-
-## set visibility for trace toggling ----
-p_blt$x$frames <- lapply(p_blt$x$frames, function(f) {
-  f$data <- lapply(f$data, function(t) { t$visible <- NULL; return(t)})
-  return(f)
-})
+# by_cats <- as.character(unique(d_rect$by))
+# order_t <- c("by1", "by2", "by3", "info", "trk")
+# len_fs <- length(p_blt$x$frames)
 
 
 ## customize legend ----
@@ -248,16 +249,17 @@ p_blt$x$layout$legend$y <- 0.85
 # show colorbar for ground track, position & name colorbar & traces, add marker
 # info from correctly built plot
 pos_trk <- which(order_t == "trk")
-pos_info <- which(order_t == "info")
-bgcolors <- unlist(lapply(p_blt$x$frames[[1]]$data[1:length(by_cats)], function(t) t$fillcolor))
+# bgcolors <- lapply(p_blt$x$frames[[1]]$data[1:length(by_cats)], function(t) t$fillcolor)
+bgcolors <- lapply(p_blt$x$frames[[1]]$data, function(t) t$line$color[1]) %>%
+  unlist() %>% rev() %>% `[`(-1) %>% rev()
+i_info <- which(trace_names_ordered == "info")
 for (i in 1:len_fs) {
-  p_blt$x$frames[[i]]$data[[pos_info]]$hoverlabel$bgcolor <- as.character(
-    factor(
-      x = p_blt$x$frames[[i]]$data[[pos_info]]$hoverlabel$bgcolor,
-      levels = order_t[1:length(by_cats)], labels = bgcolors, ordered = TRUE
-    )
-  )
-  p_blt$x$frames[[i]]$data[[pos_info]]$showlegend <- FALSE
+  p_blt$x$frames[[i]]$data[[i_info]]$hoverlabel$bgcolor <- 
+    as.character(factor(
+      x = p_blt$x$frames[[i]]$data[[i_info]]$hoverlabel$bgcolor,
+      levels = trace_names_prepend, labels = bgcolors, ordered = TRUE
+    ))
+  # below would need to be fixed
   p_blt$x$frames[[i]]$data[[pos_trk]]$marker <- p_mark_blt$x$frames[[i]]$data[[1]]$marker
   p_blt$x$frames[[i]]$data[[pos_trk]]$marker$showscale <- TRUE
   p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$yanchor <- "top"
@@ -265,15 +267,35 @@ for (i in 1:len_fs) {
   p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$len <- 0.5
   p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$title <- "SEA"
 }
+#pos_info <- which(order_t == "info")
+#for (i in 1:len_fs) {
+#  p_blt$x$frames[[i]]$data[[pos_info]]$hoverlabel$bgcolor <- as.character(
+#    factor(
+#      x = p_blt$x$frames[[i]]$data[[pos_info]]$hoverlabel$bgcolor,
+#      levels = order_t[1:length(by_cats)], labels = bgcolors, ordered = TRUE
+#    )
+#  )
+#  p_blt$x$frames[[i]]$data[[pos_info]]$showlegend <- FALSE
+#  p_blt$x$frames[[i]]$data[[pos_trk]]$marker <- p_mark_blt$x$frames[[i]]$data[[1]]$marker
+#  p_blt$x$frames[[i]]$data[[pos_trk]]$marker$showscale <- TRUE
+#  p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$yanchor <- "top"
+#  p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$y <- 0.65
+#  p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$len <- 0.5
+#  p_blt$x$frames[[i]]$data[[pos_trk]]$marker$colorbar$title <- "SEA"
+#}
 
-## add data to register all frame traces ----
-# Adds all traces from 1st frame to `data` (do not have to ad map trace to `frames[[1]]$data`)
-# All frame traces need to be registered in `data` (see `firstFrame` & `registerFrames` in plotlyBuild.R)
-p_blt$x$data <- p_blt$x$data[1]
-p_blt$x$data <- append(
-  p_blt$x$data, p_blt$x$frames[[1]]$data
+## add all traces from 1st frame to `data` ----
+# perform AFTER handling `frames` - we don't need to touch `data` until the end
+# do not have to add background traces to pl_blt$x$frames[[1]]$data
+# description: All frame traces need to be registered in `data`
+# See `firstFrame` & `registerFrames` in plotlyBuild.R
+# p_blt$x$data <- p_blt$x$data[1]
+# p_blt$x$data <- append(
+#  p_blt$x$data, p_blt$x$frames[[1]]$data
+#)
+p_blt$x$data <- c(
+  p_blt$x$data[1], p_blt$x$frames[[1]]$data, p_blt$x$data[len_d]
 )
-
 
 ## Layout Attributes ----
 
